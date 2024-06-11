@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local environment variables
+.env
+
+# Database
+*.sqlite3
+
+# Static files
+/static/
+
+# Media files
+/media/
+
+# Virtual environment
+venv/
+.Python
+
+# IDE settings
+.idea/
+.vscode/
+*.iml
+
+# Compiled Python files
+*.pyc
+
+# Logs and backups
+*.log
+*.bak
