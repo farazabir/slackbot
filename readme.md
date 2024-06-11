@@ -1,6 +1,8 @@
 # Slackbot
 
-This project is a bot for slack that will send a message when a new row added on googlesheet.
+## Beta version : 1.0.0
+
+This project is a bot for slack that will send a message when a new row added on googlesheet.(For Drag me)
 
 Prerequisites
 Python 3.8+
