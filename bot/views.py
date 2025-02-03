@@ -1,8 +1,10 @@
+from urllib.parse import parse_qs
 import json
-import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+import requests
 import os
+
 
 SLACK_TOKEN = os.getenv('SLACK_TOKEN')
 SLACK_CHANNEL = os.getenv('SLACK_CHANNEL')
@@ -11,38 +13,135 @@ SLACK_CHANNEL = os.getenv('SLACK_CHANNEL')
 @csrf_exempt
 def handle_interaction(request):
     if request.method == 'POST':
-        payload = json.loads(request.POST.get('payload'))
-        action_id = payload['actions'][0]['action_id']
-        user_id = payload['user']['id']
-        response_url = payload['response_url']
+        try:
+            raw_body = request.body.decode('utf-8')
+            parsed_body = parse_qs(raw_body)
+            payload = json.loads(parsed_body.get('payload', [None])[0])
 
-        if action_id == 'approve_event_button':
+            if not payload:
+                return JsonResponse({'error': 'Empty payload'}, status=400)
 
-            response = requests.post(response_url, json={
-                "text": f"<@{user_id}> approved the event.",
-                "replace_original": True
-            })
+            actions = payload.get('actions', [])
+            if not actions:
+                return JsonResponse({'error': 'No actions in payload'}, status=400)
 
-           # POST url for adding approved data
-            api_response = requests.post('db url ', json={
-                'event': 'approved',
-                'user': user_id,
-                'details': payload
-            })
+            action = actions[0]
+            action_id = action.get('action_id')
+            performance_id = action.get('value')
 
-            return JsonResponse({'status': 'Interaction handled'})
+            if action_id == 'approve_event_button' and performance_id:
+                try:
+                    api_url = f'https://staging.dragme.io/performances-status/{performance_id}'
+                    api_response = requests.put(
+                        api_url, json={'is_approved': 1}, timeout=5)
+                    api_response.raise_for_status()
+                    return JsonResponse({'status': 'Performance set as approved successfully'}, status=200)
+                except requests.ConnectionError:
+                    return JsonResponse({'error': 'Failed to connect to the backend service'}, status=503)
+                except requests.Timeout:
+                    return JsonResponse({'error': 'Backend service request timed out'}, status=504)
+                except requests.HTTPError as e:
+                    return JsonResponse({'error': f'Backend service returned an error: {str(e)}'}, status=502)
+                except Exception as e:
+                    return JsonResponse({'error': f'Unexpected error when calling backend service: {str(e)}'}, status=500)
+            else:
+                return JsonResponse({'error': 'Invalid action or missing performance ID'}, status=400)
 
-    return JsonResponse({'error': 'Invalid request'}, status=400)
+        except json.JSONDecodeError as e:
+            return JsonResponse({'error': f'Invalid JSON: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f'Unexpected error: {str(e)}')
+            return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 @csrf_exempt
 def send_message(request):
     if request.method == 'POST':
         data = json.loads(request.body)
-        event_name = data['eventName']
-        event_location = data['eventLocation']
-        event_date = data['eventDate']
-        performers = data['performers']
+        performance_id = data.get('id')
+        event_date = data.get('event_date')
+        event_name = data.get('event_name')
+        location = data.get('location')
+        ticket_link = data.get('ticket_link')
+        venue_uuid = data.get('venue_uuid')
+        img_url = data.get('img_url')
+        event_info = data.get('event_info')
+        base_price = data.get('base_price')
+        age_minimum = data.get('age_minimum')
+        currency = data.get('currency')
+        ticket_fees = data.get('ticket_fees')
+        ticket_limit = data.get('ticket_limit')
+        tickets_on_sale = data.get('tickets_on_sale')
+        event_time = data.get('event_time')
+        provider = data.get('provider')
+        artist = data.get('artist')
+        user_id = data.get('user_id')
+
+        fields = []
+
+        if performance_id:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*ID:* {performance_id}"})
+        if event_name:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Event Name:* {event_name}"})
+        if location:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Location:* {location}"})
+        if event_date:
+            fields.append({"type": "mrkdwn", "text": f"*Date:* {event_date}"})
+        if ticket_link:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Ticket Link:* {ticket_link}"})
+        if venue_uuid:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Venue UUID:* {venue_uuid}"})
+        if img_url:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Image URL:* {img_url}"})
+        if event_info:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Event Info:* {event_info}"})
+        if base_price:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Base Price:* {base_price}"})
+        if age_minimum:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Age Minimum:* {age_minimum}"})
+        if currency:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Currency:* {currency}"})
+        if ticket_fees:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Ticket Fees:* {ticket_fees}"})
+        if ticket_limit:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Ticket Limit:* {ticket_limit}"})
+        if tickets_on_sale:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Tickets on Sale:* {tickets_on_sale}"})
+        if event_time:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Event Time:* {event_time}"})
+        if provider:
+            fields.append(
+                {"type": "mrkdwn", "text": f"*Provider:* {provider}"})
+        if artist:
+            fields.append({"type": "mrkdwn", "text": f"*Artist:* {artist}"})
+        if user_id:
+            fields.append({"type": "mrkdwn", "text": f"*User ID:* {user_id}"})
+
+        # Limit to maximum of 10 fields per Slack block
+        max_fields_per_block = 10
+        blocks = []
+        while len(fields) > 0:
+            blocks.append({
+                "type": "section",
+                "fields": fields[:max_fields_per_block]
+            })
+            fields = fields[max_fields_per_block:]
 
         message = {
             "channel": SLACK_CHANNEL,
@@ -54,28 +153,8 @@ def send_message(request):
                         "type": "mrkdwn",
                         "text": "*New Event Data for verification:*"
                     }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Event Name:* {event_name}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Location:* {event_location}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Date:* {event_date}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Performers:* {performers}"
-                        }
-                    ]
-                },
+                }
+            ] + blocks + [
                 {
                     "type": "actions",
                     "elements": [
@@ -86,7 +165,7 @@ def send_message(request):
                                 "text": "Approve"
                             },
                             "style": "primary",
-                            "value": "approve_event",
+                            "value": f"{performance_id}",
                             "action_id": "approve_event_button"
                         }
                     ]
@@ -102,5 +181,8 @@ def send_message(request):
         if response.status_code == 200 and response.json().get('ok'):
             return JsonResponse({'status': 'Message sent to Slack'})
         else:
-            return JsonResponse({'error': 'Failed to send message'}, status=500)
+            error_message = f"Failed to send message to Slack. Status code: {response.status_code}, Response: {response.text}"
+            print(error_message)
+            return JsonResponse({'error': error_message}, status=500)
+
     return JsonResponse({'error': 'Invalid request'}, status=400)
